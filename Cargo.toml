@@ -1,0 +1,11 @@
+[package]
+name = "penrose-rust"
+version = "0.1.0"
+authors = ["Kent Overstreet <kent.overstreet@gmail.com>"]
+
+[dependencies]
+num-complex	= "*"
+cgmath		= "*"
+cairo-rs	= "*"
+gtk		= "*"
+gio		= "*"
