@@ -6,6 +6,7 @@ extern crate gtk;
 
 use std::env::args;
 use std::time::Instant;
+use std::rc::Rc;
 
 use gio::prelude::*;
 use gtk::prelude::*;
@@ -137,11 +138,35 @@ fn rotation_q(v: Vector3<f32>, theta: f32) -> Quaternion<f32> {
                         v.normalize() * (theta / 2.0).sin())
 }
 
+struct PenroseState {
+    tiles:      Vec<Rhomboid>,
+    beat:       bool,
+    bpm:        f32,
+    start:      Instant,
+}
+
 fn build_ui(application: &gtk::Application) {
-    let start = Instant::now();
+    let state = Rc::new(PenroseState {
+        tiles:  tiles_to_rhomboids(generate_tiling(10.0, 5)),
+        beat:   false,
+        bpm:    120f32,
+        start:  Instant::now(),
+    });
+
+    let window = gtk::ApplicationWindow::new(application);
+    window.set_default_size(1000, 1000);
+
+    let pane = gtk::Paned::new(gtk::Orientation::Horizontal);
+
+    let button_beat = gtk::CheckButton::new_with_label("beat");
+
+    button_beat.connect_clicked(move |cr| {
+    });
+    pane.add(&button_beat);
 
     let drawing_area = DrawingArea::new();
-    drawing_area.connect_draw( move |_, cr| {
+    let sp = Rc::clone(&state);
+    drawing_area.connect_draw(move |_, cr| {
         cr.set_dash(&[3., 2., 1.], 1.);
         cr.scale(500f64, 500f64);
 
@@ -150,26 +175,21 @@ fn build_ui(application: &gtk::Application) {
 
         cr.set_line_width(0.0);
 
-        let t = generate_tiling(10.0, 5);
-        let t = tiles_to_rhomboids(t);
-
-        let time_ms = start.elapsed().as_millis() as f32;
+        let time = (sp.start.elapsed().as_millis() as f32) / 1000.0;
 
         let red     = Vector3::new(1f32, 0f32, 0f32);
         let green   = Vector3::new(0f32, 1f32, 0f32);
         let blue    = Vector3::new(0f32, 0f32, 1f32);
 
-        let time_scaled = time_ms / 1000.0;
-
-        let theta1 = rotation_q(Vector3::new(1f32, 1f32, 1f32), time_scaled * 1f32);
-        let theta2 = rotation_q(Vector3::new(0f32, 1f32, 0f32), time_scaled * 0.2f32);
-        let theta3 = rotation_q(Vector3::new(0f32, 0f32, 1f32), time_scaled * 0.05f32);
+        let theta1 = rotation_q(Vector3::new(1f32, 1f32, 1f32), time * 1f32);
+        let theta2 = rotation_q(Vector3::new(0f32, 1f32, 0f32), time * 0.2f32);
+        let theta3 = rotation_q(Vector3::new(0f32, 0f32, 1f32), time * 0.05f32);
 
         let color = Quaternion::from_sv(0f32, red) * (theta1 * (theta2 * theta3));
 
-        let beat = time_ms % 400.0;
+        let beat = time % 0.4;
 
-        for i in t.iter() {
+        for i in sp.tiles.iter() {
             let mut tcolor = color;
             let mut brightness = 1f32;
 
@@ -184,10 +204,11 @@ fn build_ui(application: &gtk::Application) {
             //tcolor *= time_rot;
 
             if beat < 100.0 {
-                brightness *= 100.0 / f32::max(1f32, beat);
+                //brightness *= 100.0 / f32::max(1f32, beat);
+                brightness *= 10.0 / f32::max(0.1f32, i.center().norm());
             }
 
-            //tcolor *= brightness;
+            tcolor *= brightness;
 
             fn colorscale(x: f32) -> f64 {
                 ((x + 1.0) / 2.0) as f64
@@ -211,10 +232,9 @@ fn build_ui(application: &gtk::Application) {
 
         Inhibit(false)
     });
+    pane.add2(&drawing_area);
 
-    let window = gtk::ApplicationWindow::new(application);
-    window.set_default_size(1000, 1000);
-    window.add(&drawing_area);
+    window.add(&pane);
     window.show_all();
 
     let tick = move || {
